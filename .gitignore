@@ -1,0 +1,13 @@
+# Python environment and caches (recreated by "Start Transcriber.bat")
+.venv/
+__pycache__/
+*.pyc
+
+# Downloaded voice-conversion model (fetched automatically on first run)
+models/
+
+# Personal voice profiles - biometric data, never commit
+voice_profiles/
+
+# Local tooling
+.claude/

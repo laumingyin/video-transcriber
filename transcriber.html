@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video Transcriber</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #667085;
+    --border: #e3e6ea; --accent: #2563eb; --accent-soft: #e8efff; --danger: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --panel: #181c22; --text: #e7eaee; --muted: #98a2b3;
+      --border: #2a3039; --accent: #6b9bff; --accent-soft: #1d2a45; --danger: #ff7b6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; margin-bottom: 16px;
+  }
+  #drop {
+    border: 2px dashed var(--border); border-radius: 12px; padding: 36px 16px;
+    text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  #drop.over, #drop:hover { border-color: var(--accent); background: var(--accent-soft); }
+  #drop strong { color: var(--accent); }
+  #fileName { margin-top: 8px; color: var(--muted); font-size: 13px; word-break: break-all; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 16px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  select, button {
+    font: inherit; padding: 8px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  video { width: 100%; max-height: 360px; border-radius: 8px; background: #000; margin-top: 16px; display: none; }
+  #status { font-size: 14px; color: var(--muted); min-height: 21px; }
+  #status.error { color: var(--danger); }
+  .bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 8px; display: none; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .toolbar h2 { font-size: 16px; margin: 0; }
+  .toolbar .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .toggle { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
+  #segments { max-height: 480px; overflow-y: auto; }
+  .seg { display: flex; gap: 12px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+  .seg:hover { background: var(--accent-soft); }
+  .seg.active { background: var(--accent-soft); }
+  .seg .t { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; padding-top: 1px; }
+  .seg.live .txt { color: var(--muted); }
+  #plain { white-space: pre-wrap; display: none; }
+  .empty { color: var(--muted); text-align: center; padding: 24px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 12px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .tab {
+    border: none; background: none; border-radius: 0; padding: 10px 14px; color: var(--muted);
+    border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 600;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  [hidden] { display: none !important; }
+
+  /* Voice-over */
+  .banner {
+    background: var(--accent-soft); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px;
+  }
+  .banner code { background: var(--panel); padding: 1px 6px; border-radius: 4px; }
+  .srcrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .srcrow .note { color: var(--muted); font-size: 13px; }
+  #vCues { max-height: 420px; overflow-y: auto; margin-top: 12px; }
+  .cue { display: flex; gap: 10px; align-items: center; padding: 3px 0; }
+  .cue .t { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; width: 52px; }
+  .cue input {
+    flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  }
+  .cue input:focus { outline: none; border-color: var(--accent); }
+  .cue.flag .t { color: var(--danger); }
+  input[type=range] { width: 140px; }
+  audio { width: 100%; margin-top: 12px; }
+  .results { margin-top: 16px; }
+  .results .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  #vVideoOut { display: block; }
+  .clone { margin-top: 20px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }
+  .clone > label.toggle { display: block; font-size: 14px; }
+  .clone > label.toggle input { vertical-align: -2px; margin: 0 6px 0 0; }
+  .clone .note { color: var(--muted); font-size: 13px; margin: 6px 0 10px; }
+  .clone .note.ok { color: var(--text); }
+  #vProfRecord.rec { background: var(--danger); color: #fff; border-color: var(--danger); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Video Transcriber</h1>
+  <p class="sub">Transcribe speech from a video, then turn the transcript into a US-English voice-over.</p>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="transcribe">1 · Transcribe</button>
+    <button class="tab" data-tab="voice">2 · Voice-over</button>
+  </nav>
+
+  <div id="tab-transcribe">
+  <section class="panel">
+    <div id="drop">
+      <div><strong>Choose a video or audio file</strong> or drag it here</div>
+      <div id="fileName">MP4, WebM, MOV, MKV, MP3, WAV, M4A…</div>
+      <input id="file" type="file" accept="video/*,audio/*" hidden>
+    </div>
+    <video id="player" controls></video>
+
+    <div class="row">
+      <label>Model
+        <select id="model">
+          <option value="onnx-community/whisper-tiny">Tiny (fastest, ~40 MB)</option>
+          <option value="onnx-community/whisper-base" selected>Base (balanced, ~80 MB)</option>
+          <option value="onnx-community/whisper-small">Small (most accurate, ~250 MB)</option>
+        </select>
+      </label>
+      <label>Language
+        <select id="language">
+          <option value="">Auto-detect</option>
+          <option value="english">English</option>
+          <option value="chinese">Chinese</option>
+          <option value="malay">Malay</option>
+          <option value="japanese">Japanese</option>
+          <option value="korean">Korean</option>
+          <option value="spanish">Spanish</option>
+          <option value="french">French</option>
+          <option value="german">German</option>
+          <option value="portuguese">Portuguese</option>
+          <option value="italian">Italian</option>
+          <option value="russian">Russian</option>
+          <option value="hindi">Hindi</option>
+          <option value="indonesian">Indonesian</option>
+          <option value="thai">Thai</option>
+          <option value="vietnamese">Vietnamese</option>
+          <option value="tamil">Tamil</option>
+          <option value="arabic">Arabic</option>
+          <option value="dutch">Dutch</option>
+        </select>
+      </label>
+      <label>Task
+        <select id="task">
+          <option value="transcribe">Transcribe</option>
+          <option value="translate">Translate to English</option>
+        </select>
+      </label>
+      <button id="go" disabled>Transcribe only</button>
+      <button id="goDub" class="primary" disabled>Transcribe + dub in one step</button>
+      <label class="toggle"><input type="checkbox" id="reviewFirst"> Let me review the text before dubbing</label>
+    </div>
+
+    <div style="margin-top:16px">
+      <div id="status">Pick a file to get started.</div>
+      <div class="bar" id="bar"><div></div></div>
+    </div>
+    <div class="hint" id="deviceHint"></div>
+  </section>
+
+  <section class="panel">
+    <div class="toolbar">
+      <h2>Transcript</h2>
+      <div class="btns">
+        <label class="toggle"><input type="checkbox" id="showTs" checked> Timestamps</label>
+        <button id="copy" disabled>Copy</button>
+        <button id="dlTxt" disabled>.txt</button>
+        <button id="dlSrt" disabled>.srt</button>
+        <button id="dlVtt" disabled>.vtt</button>
+      </div>
+    </div>
+    <div id="segments"><div class="empty">The transcript will appear here.</div></div>
+    <div id="plain"></div>
+  </section>
+  </div>
+
+  <div id="tab-voice" hidden>
+    <div class="banner" id="vServer">
+      The voice-over needs the local helper. Double-click <code>Start Transcriber.bat</code> (or run
+      <code>python server.py</code>) in this file's folder, and keep that window open.
+      It opens this page at <code>http://localhost:8765</code>.
+      <div style="margin-top:8px"><button id="vRetry">Check again</button></div>
+    </div>
+
+    <section class="panel">
+      <div class="toolbar">
+        <h2>Subtitles</h2>
+        <div class="srcrow">
+          <button id="vFromTranscript" disabled>Use transcript from step 1</button>
+          <button id="vPickSubs">Load .srt / .vtt…</button>
+          <input id="vSubsFile" type="file" accept=".srt,.vtt,text/vtt" hidden>
+        </div>
+      </div>
+      <div class="srcrow"><span class="note" id="vCueInfo">No subtitles loaded. You can edit each line before generating the voice.</span></div>
+      <div id="vCues"></div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar"><h2>Voice</h2></div>
+      <div class="row" style="margin-top:0">
+        <label>Voice (US English)
+          <select id="vVoice"><option value="en-US-AriaNeural">en-US-AriaNeural (Female)</option></select>
+        </label>
+        <button id="vPreview">▶ Preview voice</button>
+        <label>Speaking rate
+          <select id="vRate">
+            <option value="-10">Slower (−10%)</option>
+            <option value="0" selected>Normal</option>
+            <option value="10">Faster (+10%)</option>
+            <option value="20">Much faster (+20%)</option>
+          </select>
+        </label>
+        <label>Max speed-up for long lines: <span id="vMaxSpeedVal">1.5×</span>
+          <input type="range" id="vMaxSpeed" min="1" max="2" step="0.1" value="1.5">
+        </label>
+      </div>
+
+      <div class="clone" id="vClone">
+        <label class="toggle"><input type="checkbox" id="vUseMe" disabled>
+          <strong>Sound like me</strong>&nbsp;(your voice with the US accent of the voice above)</label>
+        <div class="note" id="vCloneInfo">Checking voice cloning…</div>
+        <div class="srcrow" id="vProfileBtns" hidden>
+          <button id="vProfFromVideo">Use my voice from the step 1 video</button>
+          <button id="vProfUpload">Upload a recording…</button>
+          <button id="vProfRecord">● Record 30 s</button>
+          <button id="vProfDelete" hidden>Delete profile</button>
+          <input id="vProfFile" type="file" accept="audio/*,video/*" hidden>
+        </div>
+        <div class="row" id="vStrengthRow" hidden style="margin-top:4px">
+          <label>Voice match
+            <select id="vStrength">
+              <option value="normal">Normal</option>
+              <option value="strong">Strong (closer to you, 2× slower)</option>
+            </select>
+          </label>
+        </div>
+        <div class="note" id="vCloneTip" hidden>Tip: pick a base voice of the same gender as you. Speed is about 1 minute of processing per minute of speech.</div>
+      </div>
+
+      <div class="toolbar" style="margin-top:20px"><h2>Video (optional)</h2></div>
+      <div class="srcrow">
+        <span class="note" id="vVideoInfo">No video. You'll get a voice track (.wav) only.</span>
+        <button id="vPickVideo">Choose video…</button>
+        <button id="vClearVideo" hidden>Remove</button>
+        <input id="vVideoFile" type="file" accept="video/*" hidden>
+      </div>
+      <div class="row">
+        <label>Keep original audio underneath: <span id="vKeepVal">0%</span>
+          <input type="range" id="vKeep" min="0" max="0.5" step="0.05" value="0">
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="vGo" class="primary" disabled>Generate voice-over</button>
+      </div>
+      <div style="margin-top:16px">
+        <div id="vStatus"></div>
+        <div class="bar" id="vBar"><div></div></div>
+      </div>
+
+      <div class="results" id="vResults" hidden>
+        <audio id="vAudio" controls></audio>
+        <video id="vVideoOut" controls hidden></video>
+        <div class="btns">
+          <button id="vDlWav">Download voice (.wav)</button>
+          <button id="vDlMp4" hidden>Download dubbed video (.mp4)</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- The Whisper model runs in a Web Worker so the page stays responsive. -->
+<script id="worker-src" type="text/js-worker">
+import { pipeline, WhisperTextStreamer } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1";
+
+let transcriber = null;
+let loadedKey = null;
+
+async function getTranscriber(model, device) {
+  const key = model + "|" + device;
+  if (transcriber && loadedKey === key) return transcriber;
+  if (transcriber) { try { await transcriber.dispose(); } catch {} }
+  const opts = {
+    device,
+    progress_callback: (p) => self.postMessage({ type: "load", data: p }),
+  };
+  // WebGPU works best with an fp32 encoder and a quantized decoder; WASM uses 8-bit.
+  opts.dtype = device === "webgpu"
+    ? { encoder_model: "fp32", decoder_model_merged: "q4" }
+    : "q8";
+  transcriber = await pipeline("automatic-speech-recognition", model, opts);
+  loadedKey = key;
+  return transcriber;
+}
+
+self.onmessage = async (e) => {
+  const { audio, model, language, task, device } = e.data;
+  try {
+    const t = await getTranscriber(model, device);
+    self.postMessage({ type: "ready" });
+
+    const timePrecision =
+      t.processor.feature_extractor.config.chunk_length / t.model.config.max_source_positions;
+
+    let live = "";
+    let chunkStart = 0;
+    const streamer = new WhisperTextStreamer(t.tokenizer, {
+      time_precision: timePrecision,
+      skip_prompt: true,
+      on_chunk_start: (x) => { chunkStart = x; live = ""; },
+      callback_function: (text) => {
+        live += text;
+        self.postMessage({ type: "partial", data: { start: chunkStart, text: live } });
+      },
+      on_chunk_end: () => { live = ""; },
+    });
+
+    const opts = {
+      chunk_length_s: 30,
+      stride_length_s: 5,
+      return_timestamps: true,
+      task,
+      streamer,
+    };
+    if (language) opts.language = language;
+
+    const output = await t(audio, opts);
+    self.postMessage({ type: "done", data: output });
+  } catch (err) {
+    self.postMessage({ type: "error", data: String(err && err.message || err) });
+  }
+};
+</script>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fileInput = $("file"), drop = $("drop"), player = $("player");
+const statusEl = $("status"), bar = $("bar"), barFill = bar.firstElementChild;
+const segEl = $("segments"), plainEl = $("plain");
+
+let currentFile = null;
+let chunks = [];            // [{start, end, text}]
+let busy = false;
+const device = "gpu" in navigator ? "webgpu" : "wasm";
+$("deviceHint").textContent = device === "webgpu"
+  ? "Using WebGPU for acceleration. The model downloads once, then it's cached."
+  : "WebGPU isn't available, so this runs on the CPU (WASM), which is slower. Chrome or Edge give the best speed. The model downloads once, then it's cached.";
+
+// ---------- Worker ----------
+const workerUrl = URL.createObjectURL(
+  new Blob([$("worker-src").textContent], { type: "text/javascript" })
+);
+const worker = new Worker(workerUrl, { type: "module" });
+
+const loadProgress = {};    // file -> {loaded,total}
+worker.onmessage = (e) => {
+  const { type, data } = e.data;
+  if (type === "load") {
+    if (data.status === "progress" && data.total) {
+      loadProgress[data.file] = { loaded: data.loaded, total: data.total };
+      let l = 0, t = 0;
+      for (const v of Object.values(loadProgress)) { l += v.loaded; t += v.total; }
+      setStatus(`Downloading model… ${(l / 1e6).toFixed(1)} / ${(t / 1e6).toFixed(1)} MB`);
+      setBar(l / t);
+    } else if (data.status === "initiate") {
+      setStatus("Loading model…");
+    }
+  } else if (type === "ready") {
+    setStatus("Transcribing… (live text shows below)");
+    setBar(null);
+  } else if (type === "partial") {
+    renderLive(data.start, data.text);
+    if (audioDuration) setBar(Math.min(1, data.start / audioDuration));
+  } else if (type === "done") {
+    chunks = (data.chunks || []).map((c) => ({
+      start: c.timestamp[0] ?? 0,
+      end: c.timestamp[1] ?? c.timestamp[0] ?? 0,
+      text: c.text.trim(),
+    })).filter((c) => c.text);
+    if (!chunks.length && data.text) chunks = [{ start: 0, end: audioDuration, text: data.text.trim() }];
+    render();
+    setStatus(`Done. ${chunks.length} segments, ${countWords()} words.`);
+    setBar(1);
+    finish();
+    window.onTranscriptDone?.();
+  } else if (type === "error") {
+    setStatus("Error: " + data, true);
+    finish();
+    window.onTranscriptFailed?.();
+  }
+};
+worker.onerror = (e) => { setStatus("Worker error: " + e.message, true); finish(); };
+
+// ---------- File selection ----------
+drop.onclick = () => fileInput.click();
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => {
+  e.preventDefault(); drop.classList.remove("over");
+  if (e.dataTransfer.files[0]) pickFile(e.dataTransfer.files[0]);
+};
+fileInput.onchange = () => fileInput.files[0] && pickFile(fileInput.files[0]);
+
+function pickFile(f) {
+  currentFile = f;
+  $("fileName").textContent = `${f.name} (${(f.size / 1e6).toFixed(1)} MB)`;
+  if (player.src) URL.revokeObjectURL(player.src);
+  player.src = URL.createObjectURL(f);
+  player.style.display = "block";
+  $("go").disabled = $("goDub").disabled = busy;
+  setStatus("Ready. Click Transcribe.");
+}
+
+// ---------- Audio extraction ----------
+let audioDuration = 0;
+async function extractAudio(file) {
+  const buf = await file.arrayBuffer();
+  const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  let decoded;
+  try {
+    decoded = await ctx.decodeAudioData(buf);
+  } catch {
+    throw new Error("Couldn't decode the audio track. Try MP4 (H.264/AAC), WebM, MP3 or WAV.");
+  } finally {
+    ctx.close();
+  }
+  audioDuration = decoded.duration;
+  // Mix down to mono
+  const n = decoded.numberOfChannels, len = decoded.length;
+  const out = new Float32Array(len);
+  for (let c = 0; c < n; c++) {
+    const d = decoded.getChannelData(c);
+    for (let i = 0; i < len; i++) out[i] += d[i] / n;
+  }
+  return out;
+}
+
+// ---------- Run ----------
+$("go").onclick = async () => {
+  if (!currentFile || busy) return;
+  busy = true;
+  $("go").disabled = $("goDub").disabled = true;
+  ["copy", "dlTxt", "dlSrt", "dlVtt"].forEach((id) => ($(id).disabled = true));
+  chunks = [];
+  segEl.innerHTML = "";
+  plainEl.textContent = "";
+  try {
+    setStatus("Extracting audio…"); setBar(null);
+    const audio = await extractAudio(currentFile);
+    setStatus(`Audio extracted (${fmtClock(audioDuration)}). Loading model…`);
+    worker.postMessage(
+      { audio, model: $("model").value, language: $("language").value, task: $("task").value, device },
+      [audio.buffer]
+    );
+  } catch (err) {
+    setStatus(err.message, true);
+    finish();
+  }
+};
+
+function finish() {
+  busy = false;
+  $("go").disabled = $("goDub").disabled = !currentFile;
+  const has = chunks.length > 0;
+  ["copy", "dlTxt", "dlSrt", "dlVtt"].forEach((id) => ($(id).disabled = !has));
+}
+
+// ---------- Rendering ----------
+function renderLive(start, text) {
+  let live = segEl.querySelector(".seg.live");
+  if (!live) {
+    const empty = segEl.querySelector(".empty"); if (empty) empty.remove();
+    live = document.createElement("div");
+    live.className = "seg live";
+    live.innerHTML = '<span class="t"></span><span class="txt"></span>';
+    segEl.appendChild(live);
+  }
+  if (live.dataset.start !== String(start)) {
+    // A new 30s window started: freeze the previous live line
+    if (live.dataset.start !== undefined && live.querySelector(".txt").textContent) {
+      live.classList.remove("live");
+      live = null;
+      return renderLive(start, text);
+    }
+    live.dataset.start = start;
+    live.querySelector(".t").textContent = fmtClock(start);
+  }
+  live.querySelector(".txt").textContent = text;
+  segEl.scrollTop = segEl.scrollHeight;
+}
+
+function render() {
+  const showTs = $("showTs").checked;
+  segEl.style.display = showTs ? "block" : "none";
+  plainEl.style.display = showTs ? "none" : "block";
+  if (!chunks.length) {
+    segEl.innerHTML = '<div class="empty">No speech detected.</div>';
+    segEl.style.display = "block"; plainEl.style.display = "none";
+    return;
+  }
+  segEl.innerHTML = "";
+  chunks.forEach((c, i) => {
+    const d = document.createElement("div");
+    d.className = "seg";
+    d.dataset.i = i;
+    const t = document.createElement("span"); t.className = "t"; t.textContent = fmtClock(c.start);
+    const x = document.createElement("span"); x.className = "txt"; x.textContent = c.text;
+    d.append(t, x);
+    d.onclick = () => { player.currentTime = c.start; player.play(); };
+    segEl.appendChild(d);
+  });
+  plainEl.textContent = plainText();
+}
+$("showTs").onchange = () => chunks.length && render();
+
+// Highlight the segment being played
+player.ontimeupdate = () => {
+  if (!chunks.length) return;
+  const t = player.currentTime;
+  const i = chunks.findIndex((c) => t >= c.start && t < (c.end || c.start + 5));
+  segEl.querySelectorAll(".seg.active").forEach((el) => el.classList.remove("active"));
+  if (i >= 0) segEl.querySelector(`.seg[data-i="${i}"]`)?.classList.add("active");
+};
+
+// ---------- Export ----------
+const plainText = () => chunks.map((c) => c.text).join(" ").replace(/\s+/g, " ").trim();
+const countWords = () => plainText().split(/\s+/).filter(Boolean).length;
+
+function timestampedText() {
+  return chunks.map((c) => `[${fmtClock(c.start)}] ${c.text}`).join("\n");
+}
+function toSrt() {
+  return chunks.map((c, i) =>
+    `${i + 1}\n${fmtSub(c.start, ",")} --> ${fmtSub(c.end || c.start + 2, ",")}\n${c.text}\n`
+  ).join("\n");
+}
+function toVtt() {
+  return "WEBVTT\n\n" + chunks.map((c) =>
+    `${fmtSub(c.start, ".")} --> ${fmtSub(c.end || c.start + 2, ".")}\n${c.text}\n`
+  ).join("\n");
+}
+function baseName() { return (currentFile?.name || "transcript").replace(/\.[^.]+$/, ""); }
+function download(content, ext, mime) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.download = `${baseName()}.${ext}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$("copy").onclick = async () => {
+  const txt = $("showTs").checked ? timestampedText() : plainText();
+  try { await navigator.clipboard.writeText(txt); setStatus("Copied to clipboard."); }
+  catch { setStatus("Clipboard blocked by the browser. Use .txt instead.", true); }
+};
+$("dlTxt").onclick = () => download($("showTs").checked ? timestampedText() : plainText(), "txt", "text/plain");
+$("dlSrt").onclick = () => download(toSrt(), "srt", "application/x-subrip");
+$("dlVtt").onclick = () => download(toVtt(), "vtt", "text/vtt");
+
+// ---------- Helpers ----------
+function setStatus(msg, err = false) { statusEl.textContent = msg; statusEl.classList.toggle("error", err); }
+function setBar(frac) {
+  if (frac === null) { bar.style.display = "none"; return; }
+  bar.style.display = "block"; barFill.style.width = (frac * 100).toFixed(1) + "%";
+}
+function fmtClock(s) {
+  s = Math.max(0, s || 0);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+  const mm = String(m).padStart(2, "0"), ss = String(sec).padStart(2, "0");
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+function fmtSub(s, sep) {
+  s = Math.max(0, s || 0);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+  const ms = Math.round((s - Math.floor(s)) * 1000);
+  const p = (n, w = 2) => String(n).padStart(w, "0");
+  return `${p(h)}:${p(m)}:${p(sec)}${sep}${p(ms, 3)}`;
+}
+</script>
+
+<!-- ================= Step 2: Voice-over ================= -->
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const SR = 24000;            // voice track sample rate
+  const PARALLEL = 4;          // simultaneous TTS requests
+
+  let vcues = [];              // [{start, end, text}]
+  let subsName = "voiceover";
+  let videoFile = null;
+  let videoChoice = "auto";    // "auto" = follow step 1's video, "user" = picked here, "none" = removed
+  let wavBlob = null, mp4Blob = null;
+  let serverOk = false, busy = false;
+
+  // ---------- Tabs ----------
+  document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+  function showTab(name) {
+    document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    $("tab-transcribe").hidden = name !== "transcribe";
+    $("tab-voice").hidden = name !== "voice";
+    if (name === "voice") { syncFromStep1(); if (cloneAvailable) renderProfile(); }
+  }
+  function syncFromStep1() {
+    $("vFromTranscript").disabled = !(typeof chunks !== "undefined" && chunks.length);
+    if (videoChoice === "auto") {
+      const f = typeof currentFile !== "undefined" ? currentFile : null;
+      setVideo(f && f.type.startsWith("video/") ? f : null, "auto");
+    }
+    updateGo();
+  }
+
+  // ---------- Local helper ----------
+  async function checkServer() {
+    try {
+      const r = await fetch("/api/voices");
+      if (!r.ok) throw new Error(await r.text());
+      const voices = await r.json();
+      const sel = $("vVoice"), prev = sel.value;
+      sel.innerHTML = "";
+      for (const v of voices) {
+        const o = document.createElement("option");
+        o.value = v.name;
+        o.textContent = `${v.name.replace(/^en-US-|Neural$/g, "")} (${v.gender})`;
+        sel.appendChild(o);
+      }
+      sel.value = voices.some((v) => v.name === prev) ? prev : "en-US-AriaNeural";
+      serverOk = true;
+      $("vServer").hidden = true;
+      restoreSettings();
+      checkClone();
+    } catch {
+      serverOk = false;
+      $("vServer").hidden = false;
+    }
+    updateGo();
+  }
+  $("vRetry").onclick = checkServer;
+  checkServer();
+
+  // All helper calls go through here so a stopped helper gives a clear message, not "Failed to fetch".
+  async function api(url, opts) {
+    try {
+      return await fetch(url, opts);
+    } catch {
+      serverOk = false;
+      $("vServer").hidden = false;
+      throw new Error("Can't reach the local helper. Make sure the window running server.py is still open, then click Check again.");
+    }
+  }
+
+  async function tts(text, voice, ratePct, clone = false) {
+    ratePct = Math.max(-50, Math.min(100, Math.round(ratePct)));
+    const r = await api("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice, clone, strong: clone && $("vStrength").value === "strong", rate: (ratePct >= 0 ? "+" : "") + ratePct + "%" }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    return r.arrayBuffer();         // MP3, or WAV when cloned; decodeAudioData handles both
+  }
+
+  // ---------- Subtitles ----------
+  const TIME_RE = /((?:\d+:)?\d{1,2}:\d{2}[.,]\d{1,3})\s*-->\s*((?:\d+:)?\d{1,2}:\d{2}[.,]\d{1,3})/;
+  function toSec(ts) {
+    const p = ts.replace(",", ".").split(":").map(Number);
+    while (p.length < 3) p.unshift(0);
+    return p[0] * 3600 + p[1] * 60 + p[2];
+  }
+  function parseSubs(txt) {
+    const lines = txt.replace(/^﻿/, "").split(/\r?\n/);
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(TIME_RE);
+      if (!m) continue;
+      const text = [];
+      while (i + 1 < lines.length && lines[i + 1].trim()) text.push(lines[++i].trim());
+      const t = text.join(" ").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+      if (t) out.push({ start: toSec(m[1]), end: toSec(m[2]), text: t });
+    }
+    return out.sort((a, b) => a.start - b.start);
+  }
+
+  $("vPickSubs").onclick = () => $("vSubsFile").click();
+  $("vSubsFile").onchange = async () => {
+    const f = $("vSubsFile").files[0];
+    if (!f) return;
+    const cues = parseSubs(await f.text());
+    subsName = f.name.replace(/\.[^.]+$/, "");
+    setCues(cues, cues.length ? `Loaded ${f.name}` : `No subtitle lines found in ${f.name}`);
+    $("vSubsFile").value = "";
+  };
+  $("vFromTranscript").onclick = () => {
+    subsName = typeof currentFile !== "undefined" && currentFile ? currentFile.name.replace(/\.[^.]+$/, "") : "voiceover";
+    setCues(chunks.map((c) => ({ start: c.start, end: c.end, text: c.text })), "Loaded transcript from step 1");
+  };
+
+  function setCues(cues, msg) {
+    vcues = cues;
+    const box = $("vCues");
+    box.innerHTML = "";
+    cues.forEach((c, i) => {
+      const row = document.createElement("div");
+      row.className = "cue";
+      const t = document.createElement("span");
+      t.className = "t";
+      t.textContent = fmtClock(c.start);
+      const inp = document.createElement("input");
+      inp.value = c.text;
+      inp.oninput = () => (vcues[i].text = inp.value);
+      row.append(t, inp);
+      box.appendChild(row);
+    });
+    $("vCueInfo").textContent = cues.length
+      ? `${msg}: ${cues.length} lines. Fix any wording below. What you see is exactly what gets spoken.`
+      : msg;
+    updateGo();
+  }
+
+  // ---------- Video ----------
+  $("vPickVideo").onclick = () => $("vVideoFile").click();
+  $("vVideoFile").onchange = () => {
+    const f = $("vVideoFile").files[0];
+    if (f) setVideo(f, "user");
+    $("vVideoFile").value = "";
+  };
+  $("vClearVideo").onclick = () => setVideo(null, "none");
+  function setVideo(f, how) {
+    videoFile = f;
+    videoChoice = how;
+    $("vVideoInfo").textContent = f
+      ? `Video: ${f.name}${how === "auto" ? " (from step 1)" : ""}. You'll get a dubbed .mp4 plus the .wav.`
+      : "No video. You'll get a voice track (.wav) only.";
+    $("vClearVideo").hidden = !f;
+    $("vPickVideo").textContent = f ? "Choose another…" : "Choose video…";
+  }
+
+  // ---------- Controls ----------
+  $("vMaxSpeed").oninput = () => ($("vMaxSpeedVal").textContent = (+$("vMaxSpeed").value).toFixed(1) + "×");
+  $("vKeep").oninput = () => ($("vKeepVal").textContent = Math.round($("vKeep").value * 100) + "%");
+  function updateGo() {
+    $("vGo").disabled = busy || !serverOk || !vcues.some((c) => c.text.trim());
+  }
+
+  let previewAudio = null;
+  $("vPreview").onclick = async () => {
+    if (!serverOk) return vStatus("Start the local helper first (see the note above).", true);
+    const voice = $("vVoice").value;
+    const name = voice.replace(/^en-US-|(Multilingual)?Neural$/g, "");
+    try {
+      $("vPreview").disabled = true;
+      const me = useMe();
+      if (me) vStatus("Converting the preview to your voice…");
+      const text = me ? "Hi, this is how your voice-over will sound, in your own voice with a US accent."
+                      : `Hi, I'm ${name}. This is how your voice-over will sound.`;
+      const buf = await tts(text, voice, +$("vRate").value, me);
+      if (me) vStatus("");
+      if (previewAudio) { previewAudio.pause(); URL.revokeObjectURL(previewAudio.src); }
+      previewAudio = new Audio(URL.createObjectURL(new Blob([buf], { type: me ? "audio/wav" : "audio/mpeg" })));
+      previewAudio.play();
+    } catch (e) {
+      vStatus("Preview failed: " + e.message, true);
+    } finally {
+      $("vPreview").disabled = false;
+    }
+  };
+
+  // ---------- Generate ----------
+  $("vGo").onclick = () => generate();
+  async function generate() {
+    if (busy) return;
+    busy = true; updateGo();
+    $("vResults").hidden = true;
+    document.querySelectorAll("#vCues .cue.flag").forEach((el) => el.classList.remove("flag"));
+    const voice = $("vVoice").value, baseRate = +$("vRate").value, maxSpeed = +$("vMaxSpeed").value;
+    const cues = vcues.map((c, i) => ({ ...c, row: i })).filter((c) => c.text.trim());
+    const ctx = new OfflineAudioContext(1, 1, SR);
+    const clips = new Array(cues.length);
+    let done = 0, sped = 0;
+
+    const me = useMe();
+    try {
+      // 0) "Sound like me" needs a voice profile; build one from the step 1 video if missing.
+      if (me && !cloneProfile) {
+        const src = typeof currentFile !== "undefined" ? currentFile : null;
+        if (!src) throw new Error("Create your voice profile first (Sound like me section).");
+        await buildProfile(src, src.name);
+      }
+      // 1) Synthesize every line (a few at a time). Lines too long for their slot are
+      //    re-synthesized at a faster speaking rate, which keeps the pitch natural.
+      const label = me ? "Generating speech in your voice…" : "Generating speech…";
+      vStatus(`${label} 0 / ${cues.length}`); vBar(0);
+      let next = 0;
+      async function worker() {
+        while (next < cues.length) {
+          const i = next++, c = cues[i];
+          const slot = i + 1 < cues.length ? cues[i + 1].start - c.start : Infinity;
+          let buf = await ctx.decodeAudioData(await tts(c.text, voice, baseRate, me));
+          if (slot > 0 && buf.duration > slot) {
+            const factor = Math.min(buf.duration / slot, maxSpeed);
+            buf = await ctx.decodeAudioData(await tts(c.text, voice, (1 + baseRate / 100) * factor * 100 - 100 + 3, me));
+            sped++;
+          }
+          clips[i] = buf;
+          done++;
+          vStatus(`${label} ${done} / ${cues.length}`);
+          vBar(done / cues.length * 0.9);
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(PARALLEL, cues.length) }, worker));
+
+      // 2) Place each line at its timestamp; never overlap (push late if the previous line ran long).
+      vStatus("Assembling voice track…");
+      let cursor = 0, late = 0;
+      const placed = cues.map((c, i) => {
+        const at = Math.max(c.start, cursor);
+        if (at > c.start + 0.05) { late++; $("vCues").children[c.row]?.classList.add("flag"); }
+        cursor = at + clips[i].duration;
+        return at;
+      });
+      const total = Math.ceil(cursor * SR) + SR / 2;
+      const pcm = new Float32Array(total);
+      clips.forEach((b, i) => pcm.set(b.getChannelData(0), Math.round(placed[i] * SR)));
+      wavBlob = encodeWav(pcm, SR);
+      const au = $("vAudio");
+      if (au.src) URL.revokeObjectURL(au.src);
+      au.src = URL.createObjectURL(wavBlob);
+      au.hidden = false;
+      $("vVideoOut").hidden = true;
+      $("vDlMp4").hidden = true;
+      $("vResults").hidden = false;
+
+      let summary = `Voice track ready (${fmtClock(cursor)}).`;
+      if (sped) summary += ` ${sped} line(s) sped up to fit.`;
+      if (late) summary += ` ${late} line(s) start late (marked in red). Shorten their text or raise the max speed-up.`;
+
+      // 3) Optionally merge with the video on the local helper.
+      if (videoFile) {
+        vStatus("Uploading video to the local helper…"); vBar(0.92);
+        const up = await api("/api/upload", { method: "POST", body: videoFile });
+        if (!up.ok) throw new Error(await up.text());
+        const { id } = await up.json();
+        vStatus("Merging voice with video…"); vBar(0.96);
+        const r = await api(`/api/mux?video=${id}&keep=${$("vKeep").value}`, { method: "POST", body: wavBlob });
+        if (!r.ok) throw new Error("Merging failed: " + (await r.text()));
+        mp4Blob = await r.blob();
+        const vo = $("vVideoOut");
+        if (vo.src) URL.revokeObjectURL(vo.src);
+        vo.src = URL.createObjectURL(mp4Blob);
+        vo.hidden = false;
+        au.hidden = true;
+        $("vDlMp4").hidden = false;
+        summary = summary.replace("Voice track ready", "Dubbed video ready");
+      }
+      vStatus(summary); vBar(1);
+    } catch (e) {
+      vStatus("Error: " + e.message, true);
+    } finally {
+      busy = false; updateGo();
+    }
+  }
+
+  $("vDlWav").onclick = () => save(wavBlob, `${subsName}_voice.wav`);
+  $("vDlMp4").onclick = () => {
+    const base = videoFile ? videoFile.name.replace(/\.[^.]+$/, "") : subsName;
+    save(mp4Blob, `${base}_dubbed.mp4`);
+  };
+
+  // ---------- Sound like me (voice cloning) ----------
+  let cloneAvailable = false, cloneProfile = null;
+  const useMe = () => cloneAvailable && $("vUseMe").checked;
+
+  async function checkClone() {
+    try {
+      const st = await (await api("/api/vc/status")).json();
+      cloneAvailable = st.available;
+      cloneProfile = st.profile;
+      if (!st.available) {
+        $("vUseMe").disabled = true;
+        $("vUseMe").checked = false;
+        $("vCloneInfo").textContent = st.reason || "Voice cloning isn't available.";
+        $("vProfileBtns").hidden = $("vCloneTip").hidden = $("vStrengthRow").hidden = true;
+        return;
+      }
+      $("vUseMe").disabled = false;
+      $("vProfileBtns").hidden = false;
+      $("vCloneTip").hidden = false;
+      $("vStrengthRow").hidden = false;
+      renderProfile();
+    } catch { /* api() already shows the helper banner */ }
+  }
+
+  function renderProfile() {
+    const info = $("vCloneInfo");
+    if (cloneProfile) {
+      info.textContent = `Voice profile ready: ${cloneProfile.seconds}s of speech from "${cloneProfile.source}" (${cloneProfile.created}).`;
+      info.classList.add("ok");
+    } else {
+      info.textContent = "No voice profile yet. Give it 10-60 seconds of you speaking clearly with little background noise. " +
+        "If you tick the box without one, your step 1 video is used automatically.";
+      info.classList.remove("ok");
+    }
+    $("vProfDelete").hidden = !cloneProfile;
+    $("vProfFromVideo").disabled = !(typeof currentFile !== "undefined" && currentFile);
+  }
+
+  async function buildProfile(blob, sourceName) {
+    vStatus("Learning your voice… (runs locally, may take a moment)");
+    const r = await api(`/api/vc/profile?source=${encodeURIComponent(sourceName)}`, { method: "POST", body: blob });
+    if (!r.ok) throw new Error(await r.text());
+    cloneProfile = await r.json();
+    renderProfile();
+    vStatus(`Voice profile created from ${cloneProfile.seconds}s of speech.`);
+  }
+  async function tryBuild(blob, name) {
+    const btns = $("vProfileBtns").querySelectorAll("button");
+    btns.forEach((b) => (b.disabled = true));
+    try { await buildProfile(blob, name); $("vUseMe").checked = true; saveSettings(); }
+    catch (e) { vStatus("Couldn't create the voice profile: " + e.message, true); }
+    finally { btns.forEach((b) => (b.disabled = false)); renderProfile(); }
+  }
+
+  $("vProfFromVideo").onclick = () => currentFile && tryBuild(currentFile, currentFile.name);
+  $("vProfUpload").onclick = () => $("vProfFile").click();
+  $("vProfFile").onchange = () => {
+    const f = $("vProfFile").files[0];
+    if (f) tryBuild(f, f.name);
+    $("vProfFile").value = "";
+  };
+  $("vProfDelete").onclick = async () => {
+    if (!confirm("Delete your saved voice profile?")) return;
+    await api("/api/vc/profile/delete", { method: "POST" });
+    cloneProfile = null;
+    $("vUseMe").checked = false;
+    saveSettings();
+    renderProfile();
+    vStatus("Voice profile deleted.");
+  };
+
+  let recorder = null, recTimer = null;
+  $("vProfRecord").onclick = async () => {
+    const btn = $("vProfRecord");
+    if (recorder) { recorder.stop(); return; }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { return vStatus("Microphone access was blocked. Allow it in the browser, or upload a recording instead.", true); }
+    const parts = [];
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = (e) => e.data.size && parts.push(e.data);
+    recorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      clearInterval(recTimer);
+      recorder = null;
+      btn.classList.remove("rec");
+      btn.textContent = "● Record 30 s";
+      tryBuild(new Blob(parts, { type: parts[0]?.type || "audio/webm" }), "microphone recording");
+    };
+    recorder.start();
+    let left = 30;
+    btn.classList.add("rec");
+    btn.textContent = `■ Stop (${left}s)`;
+    vStatus("Recording… read anything aloud in your normal voice, e.g. describe your day or read a paragraph.");
+    recTimer = setInterval(() => {
+      left--;
+      btn.textContent = `■ Stop (${left}s)`;
+      if (left <= 0) recorder?.stop();
+    }, 1000);
+  };
+
+  // ---------- One-step: transcribe + dub ----------
+  let pendingOneStep = false;
+  $("goDub").onclick = () => {
+    if (!serverOk) {
+      showTab("voice");
+      return vStatus("Start the local helper first (see the note above), then come back to step 1.", true);
+    }
+    pendingOneStep = true;
+    $("go").click();
+  };
+  window.onTranscriptFailed = () => (pendingOneStep = false);
+  window.onTranscriptDone = () => {
+    if (!pendingOneStep) return;
+    pendingOneStep = false;
+    showTab("voice");
+    $("vFromTranscript").click();
+    if (!vcues.length) return vStatus("No speech was found to dub.", true);
+    if ($("reviewFirst").checked) {
+      vStatus("Check the text below, then click Generate voice-over.");
+      $("vCues").querySelector("input")?.focus();
+    } else {
+      generate();
+    }
+  };
+
+  // ---------- Remember settings (per browser) ----------
+  const SETTINGS = ["vVoice", "vRate", "vMaxSpeed", "vKeep", "vUseMe", "vStrength", "reviewFirst"];
+  function saveSettings() {
+    try {
+      const o = {};
+      SETTINGS.forEach((id) => (o[id] = $(id).type === "checkbox" ? $(id).checked : $(id).value));
+      localStorage.setItem("voiceover-settings", JSON.stringify(o));
+    } catch {}
+  }
+  let restored = false;
+  function restoreSettings() {
+    if (restored) return;
+    restored = true;
+    try {
+      const o = JSON.parse(localStorage.getItem("voiceover-settings") || "{}");
+      SETTINGS.forEach((id) => {
+        if (!(id in o)) return;
+        if ($(id).type === "checkbox") $(id).checked = o[id];
+        else if ($(id).tagName !== "SELECT" || [...$(id).options].some((op) => op.value === o[id])) $(id).value = o[id];
+        $(id).dispatchEvent(new Event("input"));
+      });
+    } catch {}
+  }
+  SETTINGS.forEach((id) => $(id).addEventListener("change", saveSettings));
+
+  // ---------- Helpers ----------
+  function encodeWav(samples, rate) {
+    const buf = new ArrayBuffer(44 + samples.length * 2), v = new DataView(buf);
+    const w = (o, s) => [...s].forEach((ch, i) => v.setUint8(o + i, ch.charCodeAt(0)));
+    w(0, "RIFF"); v.setUint32(4, 36 + samples.length * 2, true); w(8, "WAVE");
+    w(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, "data"); v.setUint32(40, samples.length * 2, true);
+    for (let i = 0, o = 44; i < samples.length; i++, o += 2) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+    return new Blob([buf], { type: "audio/wav" });
+  }
+  function save(blob, name) {
+    if (!blob) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  function vStatus(msg, err = false) {
+    const el = $("vStatus");
+    el.textContent = msg;
+    el.style.color = err ? "var(--danger)" : "var(--muted)";
+  }
+  function vBar(frac) {
+    $("vBar").style.display = "block";
+    $("vBar").firstElementChild.style.width = (frac * 100).toFixed(1) + "%";
+  }
+})();
+</script>
+</body>
+</html>
