@@ -186,9 +186,17 @@
 
   <div id="tab-voice" hidden>
     <div class="banner" id="vServer">
-      The voice-over needs the local helper. Double-click <code>Start Transcriber.bat</code> (or run
-      <code>python server.py</code>) in this file's folder, and keep that window open.
-      It opens this page at <code>http://localhost:8765</code>.
+      <div id="vServerLocal">
+        The voice-over needs the local helper. Double-click <code>Start Transcriber.bat</code> (or run
+        <code>python server.py</code>) in this file's folder, and keep that window open.
+        It opens this page at <code>http://localhost:8765</code>.
+      </div>
+      <div id="vServerHosted" hidden>
+        Transcription works right here, but the voice-over runs on your own PC through a small local helper.
+        Download the app from <a href="https://github.com/laumingyin/video-transcriber" target="_blank" rel="noopener">GitHub</a>,
+        double-click <code>Start Transcriber.bat</code>, and keep that window open. Then click <b>Check again</b>.
+        If the browser asks to allow access to devices on your local network, choose <b>Allow</b>.
+      </div>
       <div style="margin-top:8px"><button id="vRetry">Check again</button></div>
     </div>
 
@@ -601,6 +609,9 @@ function fmtSub(s, sep) {
   let videoChoice = "auto";    // "auto" = follow step 1's video, "user" = picked here, "none" = removed
   let wavBlob = null, mp4Blob = null;
   let serverOk = false, busy = false;
+  const HELPER = "http://localhost:8765";
+  const servedByHelper = location.origin === HELPER || location.origin === "http://127.0.0.1:8765";
+  const API = servedByHelper ? "" : HELPER;   // hosted (e.g. GitHub Pages) -> call the helper on this PC
 
   // ---------- Tabs ----------
   document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
@@ -622,7 +633,7 @@ function fmtSub(s, sep) {
   // ---------- Local helper ----------
   async function checkServer() {
     try {
-      const r = await fetch("/api/voices");
+      const r = await fetch(API + "/api/voices");
       if (!r.ok) throw new Error(await r.text());
       const voices = await r.json();
       const sel = $("vVoice"), prev = sel.value;
@@ -644,13 +655,15 @@ function fmtSub(s, sep) {
     }
     updateGo();
   }
+  $("vServerLocal").hidden = !servedByHelper;
+  $("vServerHosted").hidden = servedByHelper;
   $("vRetry").onclick = checkServer;
   checkServer();
 
   // All helper calls go through here so a stopped helper gives a clear message, not "Failed to fetch".
   async function api(url, opts) {
     try {
-      return await fetch(url, opts);
+      return await fetch(API + url, opts);
     } catch {
       serverOk = false;
       $("vServer").hidden = false;

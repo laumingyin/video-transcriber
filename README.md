@@ -8,6 +8,15 @@ A local web app that:
 
 Everything can run in one step: pick a video, click **Transcribe + dub in one step**, get a dubbed MP4.
 
+## Use it online
+
+**<https://laumingyin.github.io/video-transcriber/>**
+
+- **Transcribe** works right in the browser, with nothing to install (Chrome or Edge recommended).
+- **Voice-over** needs the local helper running on your PC (see *Quick start*). The online page connects to it at `http://localhost:8765`. If the browser asks to allow access to devices on your local network, choose **Allow**.
+
+The helper only accepts requests from its own page and from `https://laumingyin.github.io`. To allow another site (for example a fork's GitHub Pages address), set `ALLOWED_ORIGINS=https://you.github.io` before starting it.
+
 ## Quick start (Windows)
 
 1. Install [Python](https://www.python.org/downloads/) 3.13 (3.14 also works).

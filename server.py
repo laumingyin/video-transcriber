@@ -33,6 +33,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 TMP = tempfile.mkdtemp(prefix="voiceover_")
 PORT = int(os.environ.get("PORT", 8765))
+# Web pages allowed to use this helper besides its own page. Add more with the ALLOWED_ORIGINS
+# environment variable (comma-separated). Every other website is refused, so a random page you
+# visit can't drive the helper or touch your voice profile.
+ALLOWED_ORIGINS = {f"http://localhost:{PORT}", f"http://127.0.0.1:{PORT}", "https://laumingyin.github.io"} | {
+    o.strip().rstrip("/") for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()}
 RATE_RE = re.compile(r"^[+-]\d{1,3}%$")
 VOICE_RE = re.compile(r"^[A-Za-z]{2,3}-[A-Za-z]{2,4}-[A-Za-z]+$")
 PROFILE_DIR = os.path.join(HERE, "voice_profiles")
@@ -206,7 +211,28 @@ class Handler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")     # always load the latest page after an update
+        origin = self.headers.get("Origin")
+        if origin in ALLOWED_ORIGINS:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         super().end_headers()
+
+    def origin_allowed(self):
+        """Requests without an Origin come from the helper's own page or a local tool."""
+        origin = self.headers.get("Origin")
+        return origin is None or origin in ALLOWED_ORIGINS
+
+    def do_OPTIONS(self):
+        # CORS / Private Network Access preflight from the hosted page (e.g. GitHub Pages)
+        if not self.origin_allowed():
+            return self.send_error_text("origin not allowed", 403)
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def send_bytes(self, data, ctype, status=200):
         self.send_response(status)
@@ -236,6 +262,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path.startswith("/api/") and not self.origin_allowed():
+            return self.send_error_text("origin not allowed", 403)
         if path == "/":
             self.path = "/transcriber.html"
         elif path == "/api/voices":
@@ -252,6 +280,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         url = urlparse(self.path)
         q = parse_qs(url.query)
+        if not self.origin_allowed():
+            return self.send_error_text("origin not allowed", 403)
         try:
             if url.path == "/api/tts":
                 body = json.loads(self.read_body())
